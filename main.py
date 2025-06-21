@@ -13,6 +13,8 @@ VECTORSTORE_PATH = os.getenv("VECTORSTORE_PATH", "vectorstore")  # default if no
 
 if not OPENAI_API_KEY:
     st.error("❌ OPENAI_API_KEY is not set. The ChatOpenAI model will not work.")
+st.write("✅ Loaded OpenAI key?", bool(OPENAI_API_KEY))
+
 
 # --- AUTO-DOWNLOAD VECTORSTORE FILES ---
 def download_vectorstore():
