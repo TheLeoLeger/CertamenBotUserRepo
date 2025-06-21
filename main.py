@@ -49,7 +49,7 @@ st.title("📚 AI Chat from Your PDFs (OCR‑enabled)")
 def load_vectorstore(path):
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     try:
-        return FAISS.load_local(path, embeddings)
+        return FAISS.load_local(path, embeddings, allow_dangerous_deserialization=True)
     except Exception as e:
         st.error(f"Error loading vectorstore: {e}")
         return None
