@@ -1,9 +1,9 @@
 import os
 import streamlit as st
 from langchain.chains import RetrievalQA
-from langchain_openai import ChatOpenAI  # Updated import
-from langchain_community.vectorstores import FAISS  # Updated import
-from langchain_huggingface import HuggingFaceEmbeddings  # Updated import
+from langchain.chat_models import ChatOpenAI  # Keep original import
+from langchain.vectorstores import FAISS  # Keep original import
+from langchain.embeddings import HuggingFaceEmbeddings  # Keep original import
 import logging
 
 # Configure logging
@@ -161,7 +161,6 @@ def create_qa_chain(_vectorstore, model_name, temperature, max_tokens):
     """Create QA chain with specified parameters"""
     try:
         llm = ChatOpenAI(
-            model_name=model_name,
             temperature=temperature,
             max_tokens=max_tokens,
             openai_api_key=config['openai_api_key']
