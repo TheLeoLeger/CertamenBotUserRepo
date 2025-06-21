@@ -8,7 +8,7 @@ from langchain.vectorstores import FAISS
 from langchain.embeddings import HuggingFaceEmbeddings
 
 # --- ENVIRONMENT VARIABLES ---
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
 VECTORSTORE_PATH = os.getenv("VECTORSTORE_PATH", "vectorstore")  # default if not set
 
 if not OPENAI_API_KEY:
