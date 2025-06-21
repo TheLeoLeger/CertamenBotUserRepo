@@ -1,0 +1,17 @@
+
+streamlit
+pytesseract
+PyMuPDF
+google-api-python-client
+google-auth
+google-auth-oauthlib
+openai
+langchain
+faiss-cpu
+langchain-community
+gdown
+faiss-cpu
+sentence-transformers
+huggingface-hub
+transformers
+torch
