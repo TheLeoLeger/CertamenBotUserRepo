@@ -207,6 +207,7 @@ if not qa:
 if "history" not in st.session_state:
     st.session_state.history = []
 
+with tab1:
     # --- MAIN INTERFACE ---
     col1, col2 = st.columns([3, 1])
 
