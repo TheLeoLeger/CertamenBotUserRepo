@@ -311,15 +311,7 @@ def create_qa_chain_for_tabs(_vectorstore, _embeddings, model_name, temperature,
         st.error(f"❌ Error creating QA chain: {e}")
         return None
 
-# ===== REPLACE YOUR EXISTING QA CREATION =====
-# Replace your existing "qa = create_enhanced_qa_chain(...)" line with this:
 
-# Create the QA chain that will be used in both tab1 and tab2
-qa = create_qa_chain_for_tabs(vectorstore, embeddings, model_choice, temperature, max_tokens, retrieval_method)
-
-if not qa:
-    st.error("❌ Failed to create QA chain")
-    st.stop()
 
 # --- MAIN APP ---
 # Custom logo/header with CB styling
@@ -440,8 +432,10 @@ if not vectorstore:
     st.stop()
 
 # Create enhanced QA chain - Recreate on parameter changes
-qa = create_enhanced_qa_chain(vectorstore, embeddings, model_choice, temperature, max_tokens, retrieval_method)
+qa = create_qa_chain_for_tabs(vectorstore, embeddings, model_choice, temperature, max_tokens, retrieval_method)
+
 if not qa:
+    st.error("❌ Failed to create QA chain")
     st.stop()
 
 # Initialize session state
