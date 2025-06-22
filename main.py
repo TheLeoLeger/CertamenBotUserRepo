@@ -60,8 +60,8 @@ def download_vectorstore():
         os.makedirs(config['vectorstore_path'], exist_ok=True)
         
         files = {
-            "index.faiss": "https://drive.google.com/uc?id=1upeOyb4VLWdP1cE-mIIDSuWtCyrP7SEw",
-            "index.pkl": "https://drive.google.com/uc?id=1yjKByVSebOPoZkYR-0EmxA5uwfM32FIE"
+            "index.faiss": "https://drive.google.com/uc?id=1ZXBTEg-upb1I_oJbRfr80rVWcy6sKM8L",
+            "index.pkl": "https://drive.google.com/uc?id=1JSPsxyqgpe7YbMq_AWQ6KnIQ6eNAX8yj"
         }
         
         for filename, url in files.items():
