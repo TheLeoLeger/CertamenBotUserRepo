@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 # --- PAGE CONFIG (Move to top) ---
 st.set_page_config(
-    page_title="📚 PDF AI Chat", 
+    page_title="CertamenBot", 
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -21,8 +21,26 @@ st.set_page_config(
 @st.cache_data
 def get_config():
     """Get configuration with validation"""
+    # Try multiple ways to get the API key
+    api_key = None
+    
+    # Method 1: Streamlit secrets
+    try:
+        api_key = st.secrets["OPENAI_API_KEY"]
+        st.write("✅ Found key in st.secrets")
+    except:
+        st.write("❌ No key in st.secrets")
+    
+    # Method 2: Environment variable (fallback)
+    if not api_key:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if api_key:
+            st.write("✅ Found key in environment")
+        else:
+            st.write("❌ No key in environment")
+    
     config = {
-        'openai_api_key': st.secrets.get("OPENAI_API_KEY"),
+        'openai_api_key': api_key,
         'vectorstore_path': os.getenv("VECTORSTORE_PATH", "vectorstore"),
         'model_name': os.getenv("MODEL_NAME", "gpt-3.5-turbo"),
         'embedding_model': os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
@@ -35,6 +53,34 @@ config = get_config()
 if not config['openai_api_key']:
     st.error("❌ OPENAI_API_KEY is not set in Streamlit secrets.")
     st.stop()
+
+# Debug API key (remove after fixing)
+with st.sidebar:
+    st.subheader("🔍 Debug Info")
+    if config['openai_api_key']:
+        st.write("Key length:", len(config['openai_api_key']))
+        st.write("Key starts with:", config['openai_api_key'][:15] + "...")
+        st.write("Key ends with:", "..." + config['openai_api_key'][-10:])
+        st.write("Format valid:", config['openai_api_key'].startswith(('sk-', 'sk-proj-')))
+        st.write("Has hyphen after proj:", config['openai_api_key'].startswith('sk-proj-'))
+        # Show the exact characters around the potential issue
+        if len(config['openai_api_key']) > 10:
+            st.write("Characters 7-12:", repr(config['openai_api_key'][6:12]))
+    else:
+        st.write("❌ No API key found")
+        
+    # Test button
+    if st.button("🧪 Test API Key"):
+        try:
+            # Simple test
+            test_llm = ChatOpenAI(
+                temperature=0,
+                openai_api_key=config['openai_api_key']
+            )
+            # This won't actually call the API, just validates the key format
+            st.success("✅ API key format accepted by ChatOpenAI")
+        except Exception as e:
+            st.error(f"❌ API key test failed: {e}")
 
 # --- AUTO-DOWNLOAD VECTORSTORE FILES ---
 @st.cache_data
@@ -101,7 +147,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- MAIN APP ---
-st.title("📚 AI Chat from Your PDFs (OCR‑enabled)")
+st.title("📚 Ask your Sourcebooks!!")
 
 # Sidebar for settings
 with st.sidebar:
