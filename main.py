@@ -12,17 +12,22 @@ import logging
 import re
 from typing import List, Dict, Any
 import json
-
+# Add this right after your imports to set the tab logo
+st.markdown("""
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏛️</text></svg>">
+""", unsafe_allow_html=True)
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- PAGE CONFIG ---
 st.set_page_config(
     page_title="CertamenBot", 
+    page_icon="🏛️",
     layout="wide",
     initial_sidebar_state="expanded",
-    page_icon="🏛️"
+    menu_items={
+        'About': "🏛️ CertamenBot - Your Classical Studies AI Assistant"
+    }
 )
 
 # --- ENHANCED CONFIGURATION ---
