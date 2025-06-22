@@ -13,17 +13,17 @@ import re
 from typing import List, Dict, Any
 import json
 # Custom CB Favicon (SVG data URL)
-st.markdown("""
+
+
+st.set_page_config(
+    page_title="CertamenBot", 
+    page_icon="st.markdown("""
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
     <rect width='100' height='100' rx='15' fill='%23005f73'/>
     <path d='M30,30 L30,70 L50,70 L50,50 L70,50 L70,30 Z' fill='none' stroke='white' stroke-width='8'/>
     <path d='M50,30 L50,50 L70,50' fill='none' stroke='white' stroke-width='8'/>
 </svg>">
-""", unsafe_allow_html=True)
-
-st.set_page_config(
-    page_title="CertamenBot", 
-    page_icon="🏛️",
+""", unsafe_allow_html=True)",
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={
