@@ -12,13 +12,14 @@ import logging
 import re
 from typing import List, Dict, Any
 import json
-# Add this right after your imports to set the tab logo
+# Custom CB Favicon (SVG data URL)
 st.markdown("""
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏛️</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
+    <rect width='100' height='100' rx='15' fill='%23005f73'/>
+    <path d='M30,30 L30,70 L50,70 L50,50 L70,50 L70,30 Z' fill='none' stroke='white' stroke-width='8'/>
+    <path d='M50,30 L50,50 L70,50' fill='none' stroke='white' stroke-width='8'/>
+</svg>">
 """, unsafe_allow_html=True)
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 st.set_page_config(
     page_title="CertamenBot", 
