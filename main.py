@@ -121,7 +121,11 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- MAIN APP ---
-st.title("📚 Ask your Sourcebooks!!")
+# Create tabs
+tab1, tab2 = st.tabs(["🏛️ Chat", "ℹ️ About"])
+
+with tab1:
+    st.title("📚 Ask your Sourcebooks!!")
 
 # Sidebar for settings
 with st.sidebar:
@@ -208,82 +212,122 @@ if not qa:
 if "history" not in st.session_state:
     st.session_state.history = []
 
-# --- MAIN INTERFACE ---
-col1, col2 = st.columns([3, 1])
+    # --- MAIN INTERFACE ---
+    col1, col2 = st.columns([3, 1])
 
-with col1:
-    query = st.text_input(
-        "💬 Ask something about your documents:",
-        key="user_input",
-        placeholder="e.g., What are the main topics covered?"
-    )
-
-with col2:
-    search_button = st.button("🔍 Search", use_container_width=True)
-
-# --- PROCESS QUERY ---
-if query and (search_button or query != st.session_state.get("last_query", "")):
-    st.session_state.last_query = query
-    
-    with st.spinner("🤔 Thinking..."):
-        try:
-            result = qa({"query": query})
-            answer = result["result"]
-            sources = result.get("source_documents", [])
-            
-            # Add to history
-            st.session_state.history.append({
-                "query": query,
-                "answer": answer,
-                "sources": sources,
-                "timestamp": st.session_state.get("timestamp", 0) + 1
-            })
-            st.session_state.timestamp = st.session_state.get("timestamp", 0) + 1
-            
-        except Exception as e:
-            st.error(f"❌ Error processing query: {e}")
-            logger.error(f"Query processing failed: {e}")
-
-# --- DISPLAY CHAT HISTORY ---
-if st.session_state.history:
-    st.subheader("💬 Chat History")
-    
-    # Reverse order to show newest first
-    for item in reversed(st.session_state.history):
-        query_text = item["query"]
-        answer_text = item["answer"]
-        sources = item["sources"]
-        
-        # User message
-        st.markdown(
-            f"<div class='chat-user'><b>You:</b> {query_text}</div>", 
-            unsafe_allow_html=True
+    with col1:
+        query = st.text_input(
+            "💬 Ask something about your documents:",
+            key="user_input",
+            placeholder="e.g., What are the main topics covered?"
         )
-        
-        # AI response
-        st.markdown(
-            f"<div class='chat-ai'><b>AI:</b> {answer_text}</div>", 
-            unsafe_allow_html=True
-        )
-        
-        # Sources (if available)
-        if sources:
-            with st.expander(f"📚 Sources ({len(sources)} documents)", expanded=False):
-                for i, doc in enumerate(sources, 1):
-                    source_name = doc.metadata.get('source', 'Unknown')
-                    page = doc.metadata.get('page', 'N/A')
-                    content_preview = doc.page_content[:200] + "..." if len(doc.page_content) > 200 else doc.page_content
-                    
-                    st.markdown(f"""
-                    **Source {i}:** {source_name} (Page: {page})
-                    
-                    *Preview:* {content_preview}
-                    """)
-        
-        st.divider()
 
-else:
-    st.info("👋 Welcome! Ask a question about your documents to get started.")
+    with col2:
+        search_button = st.button("🔍 Search", use_container_width=True)
+
+    # --- PROCESS QUERY ---
+    if query and (search_button or query != st.session_state.get("last_query", "")):
+        st.session_state.last_query = query
+        
+        with st.spinner("🤔 Thinking..."):
+            try:
+                result = qa({"query": query})
+                answer = result["result"]
+                sources = result.get("source_documents", [])
+                
+                # Add to history
+                st.session_state.history.append({
+                    "query": query,
+                    "answer": answer,
+                    "sources": sources,
+                    "timestamp": st.session_state.get("timestamp", 0) + 1
+                })
+                st.session_state.timestamp = st.session_state.get("timestamp", 0) + 1
+                
+            except Exception as e:
+                st.error(f"❌ Error processing query: {e}")
+                logger.error(f"Query processing failed: {e}")
+
+    # --- DISPLAY CHAT HISTORY ---
+    if st.session_state.history:
+        st.subheader("💬 Chat History")
+        
+        # Reverse order to show newest first
+        for item in reversed(st.session_state.history):
+            query_text = item["query"]
+            answer_text = item["answer"]
+            sources = item["sources"]
+            
+            # User message
+            st.markdown(
+                f"<div class='chat-user'><b>You:</b> {query_text}</div>", 
+                unsafe_allow_html=True
+            )
+            
+            # AI response
+            st.markdown(
+                f"<div class='chat-ai'><b>AI:</b> {answer_text}</div>", 
+                unsafe_allow_html=True
+            )
+            
+            # Sources (if available)
+            if sources:
+                with st.expander(f"📚 Sources ({len(sources)} documents)", expanded=False):
+                    for i, doc in enumerate(sources, 1):
+                        source_name = doc.metadata.get('source', 'Unknown')
+                        page = doc.metadata.get('page', 'N/A')
+                        content_preview = doc.page_content[:200] + "..." if len(doc.page_content) > 200 else doc.page_content
+                        
+                        st.markdown(f"""
+                        **Source {i}:** {source_name} (Page: {page})
+                        
+                        *Preview:* {content_preview}
+                        """)
+            
+            st.divider()
+
+    else:
+        st.info("👋 Welcome! Ask a question about your documents to get started.")
+
+with tab2:
+    st.title("🏛️ About CertamenBot")
+    
+    st.markdown("""
+    ### What is CertamenBot?
+    
+    CertamenBot is a Certamen AI which pulls off of NJCL [Sourcebooks](https://drive.google.com/drive/u/1/folders/12GCk3D9KQksf1iBC2jgfLU91pZTnDeS6?dmr=1&ec=wgc-drive-globalnav-goto) to answer questions! It uses OpenAI's GPT for its AI Logic.
+    
+    ### Developer
+    **Main Developer:** Leo Leger  
+    **Contact:** [leoallanleger@gmail.com](mailto:leoallanleger@gmail.com)
+    
+    ### Resources
+    **Sourcebooks:** [NJCL Sourcebook Collection](https://drive.google.com/drive/u/1/folders/12GCk3D9KQksf1iBC2jgfLU91pZTnDeS6?dmr=1&ec=wgc-drive-globalnav-goto)
+    
+    ---
+    
+    **⚠️ Please Note:** A few Sourcebooks could not be read and extracted by the AI, so if any questions can't be answered, that is probably why.
+    
+    ---
+    
+    *Built with ❤️ for the Certamen community*
+    """)
+    
+    # Add some stats or fun facts
+    st.subheader("📊 Quick Stats")
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("🤖 AI Model", "GPT-3.5")
+    
+    with col2:
+        if vectorstore:
+            st.metric("📚 Documents", f"{vectorstore.index.ntotal:,}")
+        else:
+            st.metric("📚 Documents", "Loading...")
+    
+    with col3:
+        st.metric("🏛️ Subject", "Certamen")
 
 # --- FOOTER ---
 st.markdown("---")
