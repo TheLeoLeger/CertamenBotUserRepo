@@ -609,8 +609,6 @@ with tab1:
     else:
         st.info("👋 Welcome to CertamenBot! Ask anything Certamen-related for comprehensive answers.")
 
-with tab2:
-
 # Replace the tab2 section in your existing code with this enhanced version
 
 with tab2:
