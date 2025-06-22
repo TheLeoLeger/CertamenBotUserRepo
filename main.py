@@ -315,14 +315,7 @@ def create_qa_chain_for_tabs(_vectorstore, _embeddings, model_name, temperature,
 # Replace your existing "qa = create_enhanced_qa_chain(...)" line with this:
 
 # Create the QA chain that will be used in both tab1 and tab2
-qa = create_qa_chain_for_tabs(
-    vectorstore, 
-    embeddings, 
-    model_choice, 
-    temperature, 
-    max_tokens, 
-    retrieval_method
-)
+qa = create_qa_chain_for_tabs(vectorstore, embeddings, model_choice, temperature, max_tokens, retrieval_method)
 
 if not qa:
     st.error("❌ Failed to create QA chain")
