@@ -610,7 +610,6 @@ with tab1:
         st.info("👋 Welcome to CertamenBot! Ask anything Certamen-related for comprehensive answers.")
 
 with tab2:
-   advanced search
 
 # Replace the tab2 section in your existing code with this enhanced version
 
