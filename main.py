@@ -27,17 +27,12 @@ def get_config():
     # Method 1: Streamlit secrets
     try:
         api_key = st.secrets["OPENAI_API_KEY"]
-        st.write("✅ Found key in st.secrets")
     except:
-        st.write("❌ No key in st.secrets")
+        pass
     
     # Method 2: Environment variable (fallback)
     if not api_key:
         api_key = os.getenv("OPENAI_API_KEY")
-        if api_key:
-            st.write("✅ Found key in environment")
-        else:
-            st.write("❌ No key in environment")
     
     config = {
         'openai_api_key': api_key,
@@ -217,9 +212,9 @@ if "history" not in st.session_state:
 
     with col1:
         query = st.text_input(
-            "💬 Ask something about your documents:",
+            "💬 Ask a question about Certamen:",
             key="user_input",
-            placeholder="e.g., What are the main topics covered?"
+            placeholder="e.g., Who is Zeus?"
         )
 
     with col2:
@@ -287,7 +282,7 @@ if "history" not in st.session_state:
             st.divider()
 
     else:
-        st.info("👋 Welcome! Ask a question about your documents to get started.")
+        st.info("👋 Welcome! Ask a question about Certamen to get started.")
 
 with tab2:
     st.title("🏛️ About CertamenBot")
