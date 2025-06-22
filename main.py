@@ -1,658 +1,551 @@
-import os
-import streamlit as st
-from langchain.chains import RetrievalQA
-from langchain.chat_models import ChatOpenAI
-from langchain.vectorstores import FAISS
-from langchain.embeddings import HuggingFaceEmbeddings
-from langchain.retrievers import EnsembleRetriever
-from langchain.retrievers import BM25Retriever
-from langchain.schema import Document
-import logging
-import re
-from typing import List, Dict, Any
-import json
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# --- PAGE CONFIG ---
-st.set_page_config(
-    page_title="CertamenBot", 
-    layout="wide",
-    initial_sidebar_state="expanded",
-    page_icon="🏛️"
-)
-
-# --- ENHANCED CONFIGURATION ---
-@st.cache_data
-def get_config():
-    """Get configuration with validation"""
-    api_key = None
-    
-    # Try multiple ways to get the API key
-    try:
-        api_key = st.secrets["OPENAI_API_KEY"]
-    except:
-        pass
-    
-    if not api_key:
-        api_key = os.getenv("OPENAI_API_KEY")
-    
-    config = {
-        'openai_api_key': api_key,
-        'vectorstore_path': os.getenv("VECTORSTORE_PATH", "vectorstore"),
-        'model_name': os.getenv("MODEL_NAME", "gpt-3.5-turbo"),
-        'embedding_model': os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2"),
-        'max_retrievals': 12,  # Increased for better coverage
-        'chunk_overlap': 50,   # For better context
-    }
-    return config
-
-config = get_config()
-
-# Validate API key
-if not config['openai_api_key']:
-    st.error("❌ OPENAI_API_KEY is not set in Streamlit secrets.")
-    st.stop()
-
-# --- ENHANCED QUERY PROCESSING ---
-class EnhancedQueryProcessor:
-    """Enhanced query processing for better name/entity matching"""
-    
-    def __init__(self):
-        # Common Certamen name variations and aliases
-        self.name_aliases = {
-            # Greek to Roman
-            'zeus': ['jupiter', 'jove', 'iuppiter'],
-            'hera': ['juno'],
-            'poseidon': ['neptune', 'neptunus'],
-            'athena': ['minerva'],
-            'apollo': ['phoebus', 'phoebus apollo'],
-            'artemis': ['diana'],
-            'aphrodite': ['venus'],
-            'ares': ['mars'],
-            'hephaestus': ['vulcan', 'vulcanus'],
-            'demeter': ['ceres'],
-            'dionysus': ['bacchus', 'liber'],
-            'hermes': ['mercury', 'mercurius'],
-            'hades': ['pluto', 'pluton', 'dis'],
-            'persephone': ['proserpina', 'proserpine'],
-            'hestia': ['vesta'],
-            # Add more as needed
-        }
-    
-    def expand_query(self, query: str) -> List[str]:
-        """Expand query with aliases and variations"""
-        queries = [query]
-        query_lower = query.lower()
-        
-        # Check for name aliases
-        for main_name, aliases in self.name_aliases.items():
-            if main_name in query_lower:
-                for alias in aliases:
-                    queries.append(query.replace(main_name, alias, 1))
-            for alias in aliases:
-                if alias in query_lower:
-                    queries.append(query.replace(alias, main_name, 1))
-        
-        # Add variations (remove articles, plurals, etc.)
-        variations = []
-        for q in queries:
-            # Remove common articles
-            clean_q = re.sub(r'\b(the|a|an)\b', '', q, flags=re.IGNORECASE).strip()
-            if clean_q and clean_q not in queries:
-                variations.append(clean_q)
-        
-        queries.extend(variations)
-        return list(set(queries))  # Remove duplicates
-    
-    def extract_entities(self, query: str) -> List[str]:
-        """Extract potential names/entities from query"""
-        # Simple capitalized word extraction (can be enhanced with NER)
-        entities = re.findall(r'\b[A-Z][a-z]+\b', query)
-        return entities
-
-# --- AUTO-DOWNLOAD VECTORSTORE FILES ---
-@st.cache_data
-def download_vectorstore():
-    """Download vectorstore files with better error handling"""
-    try:
-        import gdown
-        os.makedirs(config['vectorstore_path'], exist_ok=True)
-        
-        files = {
-            "index.faiss": "https://drive.google.com/uc?id=1ZXBTEg-upb1I_oJbRfr80rVWcy6sKM8L",
-            "index.pkl": "https://drive.google.com/uc?id=1JSPsxyqgpe7YbMq_AWQ6KnIQ6eNAX8yj"
-        }
-        
-        for filename, url in files.items():
-            filepath = os.path.join(config['vectorstore_path'], filename)
-            if not os.path.exists(filepath):
-                with st.spinner(f"📥 Downloading {filename}..."):
-                    try:
-                        gdown.download(url, filepath, quiet=False)
-                        logger.info(f"Downloaded {filename}")
-                    except Exception as e:
-                        st.error(f"Failed to download {filename}: {e}")
-                        return False
-        return True
-    except ImportError:
-        st.error("gdown package not installed. Please install with: pip install gdown")
-        return False
-    except Exception as e:
-        st.error(f"Error setting up vectorstore: {e}")
-        return False
-
-# --- ENHANCED STYLING ---
-st.markdown("""
-    <style>
-    .main { padding-top: 2rem; }
-    .chat-container { max-height: 500px; overflow-y: auto; }
-    .chat-user { 
-        background: linear-gradient(135deg, #005f73, #0a9396); 
-        color: white; 
-        padding: 12px; 
-        border-radius: 12px; 
-        margin: 8px 0; 
-        text-align: right;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    .chat-ai { 
-        background: linear-gradient(135deg, #0a9396, #94d3a2); 
-        color: white; 
-        padding: 12px; 
-        border-radius: 12px; 
-        margin: 8px 0; 
-        text-align: left;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    .source-item {
-        background: #f0f2f6;
-        padding: 8px 12px;
-        border-radius: 8px;
-        margin: 4px 0;
-        font-size: 0.9em;
-        border-left: 4px solid #0a9396;
-    }
-    .confidence-score {
-        background: #e8f4f8;
-        padding: 4px 8px;
-        border-radius: 4px;
-        font-size: 0.8em;
-        color: #005f73;
-        font-weight: bold;
-    }
-    .entity-highlight {
-        background: #ffe066;
-        padding: 2px 4px;
-        border-radius: 3px;
-        font-weight: bold;
-    }
-    .quick-action {
-        background: #0a9396;
-        color: white;
-        border: none;
-        padding: 8px 16px;
-        border-radius: 20px;
-        margin: 4px;
-        cursor: pointer;
-        font-size: 0.9em;
-    }
-    .quick-action:hover {
-        background: #005f73;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-# --- LOAD VECTORSTORE WITH ENHANCED RETRIEVAL ---
-@st.cache_resource(show_spinner="Loading knowledge base...")
-def load_enhanced_vectorstore(path, embedding_model):
-    """Load vectorstore with enhanced retrieval capabilities"""
-    try:
-        embeddings = HuggingFaceEmbeddings(model_name=embedding_model)
-        vectorstore = FAISS.load_local(
-            path, 
-            embeddings, 
-            allow_dangerous_deserialization=True
-        )
-        logger.info(f"Loaded vectorstore with {vectorstore.index.ntotal} documents")
-        return vectorstore, embeddings
-    except Exception as e:
-        st.error(f"❌ Error loading vectorstore: {e}")
-        logger.error(f"Vectorstore loading failed: {e}")
-        return None, None
-
-# --- ENHANCED RETRIEVER ---
-@st.cache_resource
-def create_enhanced_retriever(_vectorstore, _embeddings, retrieval_method="hybrid"):
-    """Create enhanced retriever with multiple search strategies"""
-    try:
-        if retrieval_method == "hybrid":
-            # Create semantic retriever
-            semantic_retriever = _vectorstore.as_retriever(
-                search_type="similarity",
-                search_kwargs={"k": 8}
-            )
-            
-            # Simplified approach - use semantic retriever with better parameters
-            # BM25 requires too much preprocessing for real-time use
-            return _vectorstore.as_retriever(
-                search_type="mmr",  # Maximum Marginal Relevance for diversity
-                search_kwargs={
-                    "k": config['max_retrievals'],
-                    "fetch_k": 20,  # Fetch more, then filter to best
-                    "lambda_mult": 0.7  # Balance relevance vs diversity
-                }
-            )
-        else:
-            # Standard retrieval methods
-            search_type = "similarity" if retrieval_method == "semantic" else "similarity"
-            return _vectorstore.as_retriever(
-                search_type=search_type,
-                search_kwargs={"k": config['max_retrievals']}
-            )
-            
-    except Exception as e:
-        logger.error(f"Enhanced retriever creation failed: {e}")
-        # Fallback to basic retriever
-        return _vectorstore.as_retriever(
-            search_type="similarity",
-            search_kwargs={"k": config['max_retrievals']}
-        )
-
-# --- ENHANCED QA CHAIN ---
-def create_enhanced_qa_chain(vectorstore, embeddings, model_name, temperature, max_tokens, retrieval_method="hybrid"):
-    """Create enhanced QA chain with better retrieval - NOT CACHED for dynamic updates"""
-    try:
-        llm = ChatOpenAI(
-            temperature=temperature,
-            max_tokens=max_tokens,
-            openai_api_key=config['openai_api_key'],
-            model_name=model_name
-        )
-        
-        # Create enhanced retriever
-        retriever = create_enhanced_retriever(vectorstore, embeddings, retrieval_method)
-        
-        # Enhanced prompt template
-        from langchain.prompts import PromptTemplate
-        
-        prompt_template = """
-        You are CertamenBot, an expert in Classical studies, mythology, history, and Latin/Greek languages.
-        
-        Use the following pieces of context to answer the question. When answering:
-        1. Be specific and cite sources when possible
-        2. If you find specific names or entities, provide comprehensive information
-        3. Include relevant cross-references (e.g., Greek/Roman equivalents)
-        4. If the question is about a specific person/character, provide their key attributes, stories, and significance
-        5. If you're not completely certain, say so
-        
-        Context: {context}
-        
-        Question: {question}
-        
-        Detailed Answer:"""
-        
-        PROMPT = PromptTemplate(
-            template=prompt_template,
-            input_variables=["context", "question"]
-        )
-        
-        qa = RetrievalQA.from_chain_type(
-            llm=llm,
-            chain_type="stuff",
-            retriever=retriever,
-            return_source_documents=True,
-            chain_type_kwargs={"prompt": PROMPT}
-        )
-        return qa
-    except Exception as e:
-        st.error(f"❌ Error creating enhanced QA chain: {e}")
-        return None
-
-# --- MAIN APP ---
-# Custom logo/header with CB styling
-st.markdown("""
-    <div style="
-        display: flex; 
-        align-items: center; 
-        justify-content: center; 
-        padding: 1rem 0 2rem 0;
-        margin-bottom: 1rem;
-    ">
-        <div style="
-            background: linear-gradient(135deg, #005f73, #0a9396, #94d3a2);
-            width: 80px;
-            height: 80px;
-            border-radius: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 8px 32px rgba(0,95,115,0.3);
-            margin-right: 1rem;
-            position: relative;
-            overflow: hidden;
-        ">
-            <div style="
-                position: absolute;
-                top: -20px;
-                right: -20px;
-                width: 60px;
-                height: 60px;
-                background: rgba(255,255,255,0.1);
-                border-radius: 50%;
-            "></div>
-            <span style="
-                font-size: 2.5rem;
-                font-weight: 900;
-                color: white;
-                font-family: 'Georgia', serif;
-                text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-                position: relative;
-                z-index: 2;
-            ">CB</span>
-        </div>
-        <div>
-            <h1 style="
-                margin: 0;
-                font-size: 3rem;
-                font-weight: 700;
-                background: linear-gradient(135deg, #005f73, #0a9396);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                font-family: 'Georgia', serif;
-            ">CertamenBot</h1>
-            <p style="
-                margin: 0;
-                color: #666;
-                font-size: 1.1rem;
-                font-style: italic;
-            ">Your Classical Studies AI Assistant</p>
-        </div>
-    </div>
-""", unsafe_allow_html=True)
-
-st.title("🏛️ CertamenBot")
-
-# Create tabs
-tab1, tab2, tab3 = st.tabs(["🏛️ Chat", "🔍 Advanced Search", "ℹ️ About"])
-
-# Initialize query processor
-query_processor = EnhancedQueryProcessor()
-
-# Sidebar for settings
-with st.sidebar:
-    st.header("⚙️ Settings")
-    
-    # Model selection
-    model_choice = st.selectbox(
-        "Choose Model",
-        ["gpt-3.5-turbo", "gpt-4", "gpt-4-turbo"],
-        index=0
-    )
-    
-    # Retrieval method
-    retrieval_method = st.selectbox(
-        "Retrieval Method",
-        ["hybrid", "semantic", "keyword"],
-        index=0,
-        help="Hybrid combines semantic understanding with keyword matching for better name/entity retrieval"
-    )
-    
-    # Temperature slider
-    temperature = st.slider("Response Creativity", 0.0, 1.0, 0.1, 0.1)
-    
-    # Max tokens
-    max_tokens = st.number_input("Max Response Length", 100, 4000, 1500)
-    
-    # Enhanced search options
-    st.subheader("🔍 Search Options")
-    use_query_expansion = st.checkbox("Expand Queries", value=True, help="Automatically include name aliases and variations")
-    show_confidence = st.checkbox("Show Confidence", value=True, help="Display confidence scores for answers")
-    
-    # Clear chat button
-    if st.button("🗑️ Clear Chat", use_container_width=True):
-        st.session_state.history = []
-        st.rerun()
-    
-    # Show vectorstore status
-    st.subheader("📊 Status")
-    if download_vectorstore():
-        st.success("✅ Ready!")
-    else:
-        st.error("❌ Vectorstore failed")
-        st.stop()
-
-# Load enhanced vectorstore
-vectorstore, embeddings = load_enhanced_vectorstore(config['vectorstore_path'], config['embedding_model'])
-if not vectorstore:
-    st.stop()
-
-# Create enhanced QA chain - Recreate on parameter changes
-qa = create_enhanced_qa_chain(vectorstore, embeddings, model_choice, temperature, max_tokens, retrieval_method)
-if not qa:
-    st.stop()
-
-# Initialize session state
-if "history" not in st.session_state:
-    st.session_state.history = []
-
-with tab1:
-    # Quick action buttons
-    st.subheader("🚀 Quick Actions")
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        if st.button("⚡ Random Myth"):
-            st.session_state.quick_query = "Tell me about a famous Greek or Roman myth"
-    with col2:
-        if st.button("👑 Gods & Goddesses"):
-            st.session_state.quick_query = "List the major Olympian gods and their roles"
-    with col3:
-        if st.button("🏛️ Roman History"):
-            st.session_state.quick_query = "Tell me about important Roman historical events"
-    with col4:
-        if st.button("📚 Etymology"):
-            st.session_state.quick_query = "Explain the etymology of a Latin word"
-    
-    # Main input
-    col1, col2 = st.columns([4, 1])
-    
-    with col1:
-        query = st.text_input(
-            "💬 Ask anything Certamen:",
-            key="user_input",
-            placeholder="e.g., Who is Minerva? What happened at the Battle of Actium? Etymology of 'democracy'",
-            value=st.session_state.get("quick_query", "")
-        )
-        
-        if "quick_query" in st.session_state:
-            del st.session_state.quick_query
-    
-    with col2:
-        search_button = st.button("🔍 Search", use_container_width=True)
-    
-    # Show expanded queries if enabled
-    if query and use_query_expansion:
-        expanded_queries = query_processor.expand_query(query)
-        if len(expanded_queries) > 1:
-            with st.expander("🔄 Query Variations", expanded=False):
-                for i, eq in enumerate(expanded_queries[:5]):  # Show first 5
-                    st.text(f"{i+1}. {eq}")
-    
-    # Process query
-    if query and (search_button or query != st.session_state.get("last_query", "")):
-        st.session_state.last_query = query
-        
-        with st.spinner("🤔 Searching through ancient texts..."):
-            try:
-                # Use expanded queries if enabled
-                queries_to_try = query_processor.expand_query(query) if use_query_expansion else [query]
-                
-                best_result = None
-                best_score = 0
-                
-                # Try each query variation
-                for q in queries_to_try[:3]:  # Limit to first 3 to avoid too many API calls
-                    try:
-                        result = qa({"query": q})
-                        # Simple scoring based on answer length and source count
-                        score = len(result["result"]) + len(result.get("source_documents", [])) * 50
-                        if score > best_score:
-                            best_result = result
-                            best_score = score
-                    except:
-                        continue
-                
-                if best_result:
-                    answer = best_result["result"]
-                    sources = best_result.get("source_documents", [])
-                    
-                    # Extract entities from original query
-                    entities = query_processor.extract_entities(query)
-                    
-                    # Add to history
-                    st.session_state.history.append({
-                        "query": query,
-                        "answer": answer,
-                        "sources": sources,
-                        "entities": entities,
-                        "confidence": min(100, best_score // 10),  # Simple confidence calculation
-                        "timestamp": st.session_state.get("timestamp", 0) + 1
-                    })
-                    st.session_state.timestamp = st.session_state.get("timestamp", 0) + 1
-                else:
-                    st.error("❌ No results found. Try rephrasing your question.")
-                
-            except Exception as e:
-                st.error(f"❌ Error processing query: {e}")
-                logger.error(f"Query processing failed: {e}")
-    
-    # Display chat history
-    if st.session_state.history:
-        st.subheader("💬 Chat History")
-        
-        for item in reversed(st.session_state.history):
-            query_text = item["query"]
-            answer_text = item["answer"]
-            sources = item["sources"]
-            entities = item.get("entities", [])
-            confidence = item.get("confidence", 0)
-            
-            # User message with entity highlighting
-            highlighted_query = query_text
-            for entity in entities:
-                highlighted_query = highlighted_query.replace(
-                    entity, 
-                    f"<span class='entity-highlight'>{entity}</span>"
-                )
-            
-            st.markdown(
-                f"<div class='chat-user'><b>You:</b> {highlighted_query}</div>", 
-                unsafe_allow_html=True
-            )
-            
-            # AI response with confidence
-            confidence_badge = ""
-            if show_confidence and confidence > 0:
-                confidence_badge = f"<span class='confidence-score'>Confidence: {confidence}%</span>"
-            
-            st.markdown(
-                f"<div class='chat-ai'><b>CertamenBot:</b> {answer_text} {confidence_badge}</div>", 
-                unsafe_allow_html=True
-            )
-            
-            # Enhanced sources display
-            if sources:
-                with st.expander(f"📚 Sources ({len(sources)} documents)", expanded=False):
-                    for i, doc in enumerate(sources, 1):
-                        source_name = doc.metadata.get('source', 'Unknown')
-                        page = doc.metadata.get('page', 'N/A')
-                        content_preview = doc.page_content[:300] + "..." if len(doc.page_content) > 300 else doc.page_content
-                        
-                        # Highlight entities in content preview
-                        for entity in entities:
-                            content_preview = re.sub(
-                                f"\\b{re.escape(entity)}\\b",
-                                f"**{entity}**",
-                                content_preview,
-                                flags=re.IGNORECASE
-                            )
-                        
-                        st.markdown(f"""
-                        <div class='source-item'>
-                        <strong>Source {i}:</strong> {source_name} (Page: {page})<br>
-                        <em>Content:</em> {content_preview}
-                        </div>
-                        """, unsafe_allow_html=True)
-            
-            st.divider()
-    
-    else:
-        st.info("👋 Welcome to CertamenBot! Ask anything Certamen-related for comprehensive answers.")
-
 with tab2:
     st.title("🔍 Advanced Search")
-    st.markdown("Coming soon: Advanced filtering, timeline view, and relationship mapping!")
     
-    # Placeholder for advanced features
-    st.info("🚧 Advanced features in development:\n- Filter by source type\n- Timeline visualization\n- Character relationship maps\n- Etymology trees")
+    # Create sub-tabs for different difficulty levels
+    adv_tab1, adv_tab2, adv_tab3 = st.tabs(["🌱 Novice", "📚 Intermediate", "🧠 Advanced"])
+    
+    # Store selected difficulty level in session state
+    if 'difficulty_level' not in st.session_state:
+        st.session_state.difficulty_level = 'novice'
+    
+    with adv_tab1:
+        st.session_state.difficulty_level = 'novice'
+        st.header("🌱 Novice Level")
+        st.markdown("*Simple questions with clear, beginner-friendly explanations*")
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            st.subheader("📖 Basic Questions")
+            
+            # Easy category selection
+            easy_category = st.selectbox(
+                "Choose a topic:",
+                [
+                    "Select a topic...",
+                    "🏛️ Major Gods & Goddesses",
+                    "⚡ Basic Mythology Stories", 
+                    "👑 Famous Roman Emperors",
+                    "🗡️ Well-known Heroes",
+                    "🏛️ Important Cities",
+                    "📚 Famous Literature",
+                    "🔤 Common Latin Words",
+                    "🎭 Basic Greek Culture",
+                    "⚔️ Major Wars",
+                    "🏺 Daily Life in Rome/Greece"
+                ]
+            )
+            
+            # Generate easy questions based on category
+            easy_questions = {
+                "🏛️ Major Gods & Goddesses": [
+                    "Who is the king of the gods?",
+                    "Who is the goddess of wisdom?",
+                    "Who is the god of the sea?",
+                    "Who is the god of war?",
+                    "Who is the goddess of love?",
+                    "Who is the messenger god?",
+                    "Who is the god of the underworld?",
+                    "Who is the goddess of the hunt?"
+                ],
+                "⚡ Basic Mythology Stories": [
+                    "What is the story of Pandora's box?",
+                    "Who was Hercules?",
+                    "What happened to Icarus?",
+                    "Who was Medusa?",
+                    "What is the Trojan Horse story?",
+                    "Who was Perseus?",
+                    "What is the story of King Midas?",
+                    "Who was Theseus?"
+                ],
+                "👑 Famous Roman Emperors": [
+                    "Who was Julius Caesar?",
+                    "Who was Augustus?",
+                    "Who was Nero?",
+                    "Who was Trajan?",
+                    "Who was Marcus Aurelius?",
+                    "Who was Constantine?",
+                    "Who was Hadrian?",
+                    "Who was Caligula?"
+                ],
+                "🗡️ Well-known Heroes": [
+                    "Who was Achilles?",
+                    "Who was Odysseus?",
+                    "Who was Aeneas?",
+                    "Who was Hector?",
+                    "Who was Jason?",
+                    "Who was Bellerophon?",
+                    "Who was Cadmus?",
+                    "Who was Orpheus?"
+                ],
+                "🔤 Common Latin Words": [
+                    "What does 'carpe diem' mean?",
+                    "What does 'et cetera' mean?",
+                    "What does 'veni, vidi, vici' mean?",
+                    "What does 'alma mater' mean?",
+                    "What does 'ad hoc' mean?",
+                    "What does 'per se' mean?",
+                    "What does 'vice versa' mean?",
+                    "What does 'status quo' mean?"
+                ]
+            }
+            
+            if easy_category != "Select a topic..." and easy_category in easy_questions:
+                st.write("**Sample questions:**")
+                for i, question in enumerate(easy_questions[easy_category][:6], 1):
+                    if st.button(f"{i}. {question}", key=f"easy_{i}_{easy_category}"):
+                        st.session_state.level_query = question
+                        st.session_state.query_level = 'novice'
+            
+            # Custom novice question
+            st.subheader("💬 Ask Your Own Simple Question")
+            novice_custom = st.text_input(
+                "Ask a basic question:",
+                placeholder="e.g., Who is Jupiter? What is the Colosseum?",
+                key="novice_input"
+            )
+            
+            if st.button("🔍 Search (Novice Level)", key="novice_search"):
+                if novice_custom:
+                    st.session_state.level_query = novice_custom
+                    st.session_state.query_level = 'novice'
+        
+        with col2:
+            st.subheader("🎯 Novice Features")
+            st.info("""
+            **At Novice Level, you get:**
+            • Simple, clear explanations
+            • Basic facts and definitions
+            • Easy-to-understand examples
+            • No complex historical context
+            • Visual aids when helpful
+            """)
+            
+            if st.button("🎲 Random Easy Question"):
+                import random
+                easy_randoms = [
+                    "Who is Zeus?", "Who is Venus?", "What is Mount Olympus?",
+                    "Who was Cleopatra?", "What is the Pantheon?", "Who is Apollo?",
+                    "What does SPQR stand for?", "Who was Homer?", "What is Latin?",
+                    "Who is Diana?", "What is a gladiator?", "Who is Neptune?"
+                ]
+                st.session_state.level_query = random.choice(easy_randoms)
+                st.session_state.query_level = 'novice'
 
-with tab3:
-    st.title("🏛️ About CertamenBot")
-    
-    st.markdown("""
-    ### Enhanced Features
-    
-    CertamenBot includes several improvements for better name and entity retrieval:
-    
-    **🔍 Enhanced Search:**
-    - **Hybrid Retrieval**: Combines semantic understanding with keyword matching
-    - **Query Expansion**: Automatically includes Greek/Roman name variants
-    - **Entity Recognition**: Better handling of proper names and places
-    
-    **🎯 Smart Features:**
-    - **Confidence Scoring**: Shows how confident the AI is in its answers
-    - **Source Highlighting**: Highlights found entities in source documents
-    - **Quick Actions**: Common query templates for faster searching
-    
-    **📚 Better Coverage:**
-    - Increased retrieval count for comprehensive answers
-    - Multiple search strategies to find specific names
-    - Enhanced prompting for more detailed responses
-    
-    ### Developer
-    **Main Developer:** Leo Leger  
-    **Contact:** [leoallanleger@gmail.com](mailto:leoallanleger@gmail.com)
-    
-    ### Resources
-    **Sourcebooks:** [NJCL Sourcebook Collection](https://drive.google.com/drive/u/1/folders/12GCk3D9KQksf1iBC2jgfLU91pZTnDeS6?dmr=1&ec=wgc-drive-globalnav-goto)
-    
-    ---
-    
-    *Built with ❤️ for the Certamen community*
-    """)
-    
-    # Enhanced stats
-    st.subheader("📊 System Stats")
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("🤖 AI Model", model_choice)
-    
-    with col2:
-        if vectorstore:
-            st.metric("📚 Documents", f"{vectorstore.index.ntotal:,}")
-        else:
-            st.metric("📚 Documents", "Loading...")
-    
-    with col3:
-        st.metric("🔍 Retrieval", retrieval_method.title())
-    
-    with col4:
-        st.metric("📈 Max Results", config['max_retrievals'])
+    with adv_tab2:
+        st.session_state.difficulty_level = 'intermediate'
+        st.header("📚 Intermediate Level")
+        st.markdown("*More complex questions with detailed explanations and context*")
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            st.subheader("🔍 Intermediate Questions")
+            
+            intermediate_category = st.selectbox(
+                "Choose a topic area:",
+                [
+                    "Select a topic...",
+                    "🏛️ Divine Relationships & Family Trees",
+                    "⚔️ Military Tactics & Strategies",
+                    "🏛️ Political Systems & Governance",
+                    "📚 Literary Analysis & Themes",
+                    "🎭 Religious Practices & Festivals",
+                    "🏺 Social Classes & Daily Life",
+                    "🗺️ Geographic & Cultural Connections",
+                    "💰 Economic & Trade Systems",
+                    "🎨 Art & Architectural Styles",
+                    "📜 Historical Cause & Effect"
+                ]
+            )
+            
+            intermediate_questions = {
+                "🏛️ Divine Relationships & Family Trees": [
+                    "How are Zeus and Hera related, and what conflicts arose from their marriage?",
+                    "What is the relationship between Greek and Roman versions of the same gods?",
+                    "How did the Titans relate to the Olympian gods?",
+                    "What role did divine intervention play in the Trojan War?",
+                    "How did Roman gods differ in character from their Greek counterparts?",
+                    "What were the major love affairs of Jupiter and their consequences?"
+                ],
+                "⚔️ Military Tactics & Strategies": [
+                    "How did the Roman legion system evolve over time?",
+                    "What were the key differences between Greek and Roman military tactics?",
+                    "How did Hannibal's strategy work during the Punic Wars?",
+                    "What role did siegecraft play in Roman conquests?",
+                    "How did naval warfare develop in the ancient Mediterranean?",
+                    "What were the advantages of the Roman military road system?"
+                ],
+                "🏛️ Political Systems & Governance": [
+                    "How did the Roman Republic's government structure work?",
+                    "What were the differences between Athenian and Spartan government?",
+                    "How did the transition from Republic to Empire affect Roman society?",
+                    "What role did the Senate play in Roman politics?",
+                    "How did Roman citizenship evolve and expand?",
+                    "What were the causes and effects of the Gracchi brothers' reforms?"
+                ],
+                "📚 Literary Analysis & Themes": [
+                    "What are the major themes in Virgil's Aeneid?",
+                    "How does Homer's Odyssey reflect Greek values?",
+                    "What literary techniques did Ovid use in his Metamorphoses?",
+                    "How do Greek tragedies explore the concept of fate versus free will?",
+                    "What role does honor play in Roman epic poetry?",
+                    "How did Roman poets adapt Greek literary forms?"
+                ]
+            }
+            
+            if intermediate_category != "Select a topic..." and intermediate_category in intermediate_questions:
+                st.write("**Sample questions:**")
+                for i, question in enumerate(intermediate_questions[intermediate_category][:5], 1):
+                    if st.button(f"{i}. {question}", key=f"inter_{i}_{intermediate_category}"):
+                        st.session_state.level_query = question
+                        st.session_state.query_level = 'intermediate'
+            
+            # Custom intermediate question
+            st.subheader("💬 Ask Your Own Detailed Question")
+            intermediate_custom = st.text_area(
+                "Ask a more complex question:",
+                placeholder="e.g., How did the Roman Republic's political system influence later governments? What were the causes of the fall of Troy?",
+                height=100,
+                key="intermediate_input"
+            )
+            
+            if st.button("🔍 Search (Intermediate Level)", key="intermediate_search"):
+                if intermediate_custom:
+                    st.session_state.level_query = intermediate_custom
+                    st.session_state.query_level = 'intermediate'
+        
+        with col2:
+            st.subheader("🎯 Intermediate Features")
+            st.info("""
+            **At Intermediate Level, you get:**
+            • Detailed explanations with context
+            • Historical background information
+            • Cause-and-effect relationships
+            • Multiple perspectives on events
+            • Connections between topics
+            • Primary source references
+            """)
+            
+            st.subheader("🔄 Comparison Tools")
+            comp_topic1 = st.text_input("Compare topic 1:", placeholder="e.g., Athens")
+            comp_topic2 = st.text_input("Compare topic 2:", placeholder="e.g., Sparta")
+            
+            if st.button("⚖️ Compare (Intermediate)"):
+                if comp_topic1 and comp_topic2:
+                    st.session_state.level_query = f"Compare and contrast {comp_topic1} and {comp_topic2}, including their similarities, differences, and historical significance"
+                    st.session_state.query_level = 'intermediate'
 
-# Footer
-st.markdown("---")
-st.markdown("*Enhanced with hybrid search, query expansion, and intelligent entity recognition*")
+    with adv_tab3:
+        st.session_state.difficulty_level = 'advanced'
+        st.header("🧠 Advanced Level")
+        st.markdown("*Complex, scholarly questions with comprehensive analysis*")
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            st.subheader("🎓 Advanced Research Questions")
+            
+            advanced_category = st.selectbox(
+                "Choose a specialized area:",
+                [
+                    "Select a topic...",
+                    "🔬 Textual Criticism & Manuscript Traditions",
+                    "🏛️ Prosopography & Social Networks",
+                    "📜 Epigraphy & Archaeological Evidence",
+                    "🎭 Syncretism & Religious Evolution",
+                    "💰 Economic Systems & Trade Networks",
+                    "🗣️ Linguistics & Language Evolution",
+                    "🎨 Iconography & Symbolic Systems",
+                    "⚖️ Legal Systems & Jurisprudence",
+                    "🌍 Cultural Exchange & Hellenization",
+                    "📊 Historiography & Source Analysis"
+                ]
+            )
+            
+            advanced_questions = {
+                "🔬 Textual Criticism & Manuscript Traditions": [
+                    "How do the manuscript traditions of Homer's epics reflect their oral origins?",
+                    "What can textual variants in Virgil's Aeneid tell us about ancient editorial practices?",
+                    "How did the transmission of Ovid's works influence medieval European literature?",
+                    "What role did Byzantine scholars play in preserving classical texts?",
+                    "How do papyrus discoveries change our understanding of ancient literary practices?"
+                ],
+                "🏛️ Prosopography & Social Networks": [
+                    "How did senatorial families maintain power across multiple generations in the late Republic?",
+                    "What role did marriage alliances play in Julio-Claudian dynastic politics?",
+                    "How did the equestrian order's economic activities influence imperial policy?",
+                    "What can we learn from the social networks of Greek intellectuals in the Hellenistic period?",
+                    "How did client-patron relationships structure Roman provincial administration?"
+                ],
+                "🎭 Syncretism & Religious Evolution": [
+                    "How did the cult of Isis adapt to different cultural contexts across the Mediterranean?",
+                    "What factors influenced the development of Greco-Buddhist art in ancient Gandhara?",
+                    "How did mystery religions compete with traditional Roman state religion?",
+                    "What role did solar theology play in late Roman imperial ideology?",
+                    "How did Christian apologetics engage with classical philosophical traditions?"
+                ],
+                "🗣️ Linguistics & Language Evolution": [
+                    "How did the development of Koine Greek affect literary style in the Hellenistic period?",
+                    "What can the Vulgar Latin inscriptions tell us about spoken language evolution?",
+                    "How did bilingualism function in the Roman provinces?",
+                    "What role did Greek loan words play in the development of Latin technical vocabulary?",
+                    "How did the Second Sophistic movement influence literary Greek style?"
+                ],
+                "⚖️ Legal Systems & Jurisprudence": [
+                    "How did the development of Roman law influence provincial legal systems?",
+                    "What role did legal rhetoric play in the education of Roman elites?",
+                    "How did the Digest of Justinian preserve and transform classical legal principles?",
+                    "What can legal papyri tell us about provincial administration in Roman Egypt?",
+                    "How did concepts of citizenship evolve in Roman legal thought?"
+                ]
+            }
+            
+            if advanced_category != "Select a topic..." and advanced_category in advanced_questions:
+                st.write("**Sample research questions:**")
+                for i, question in enumerate(advanced_questions[advanced_category][:4], 1):
+                    if st.button(f"{i}. {question}", key=f"adv_{i}_{advanced_category}"):
+                        st.session_state.level_query = question
+                        st.session_state.query_level = 'advanced'
+            
+            # Very specific advanced questions
+            st.subheader("🔬 Expert-Level Queries")
+            expert_examples = [
+                "Who was Terpander and what was his role in the development of Greek music theory?",
+                "What is the significance of the Dionysiac technitai in Hellenistic theater?",
+                "How did the lex Iulia de Maritandis Ordinibus affect Roman demographic patterns?",
+                "What was the role of the grammaticus in Roman educational curriculum?",
+                "Who was Menecrates of Xanthos and what was his historical methodology?",
+                "What is the significance of the Fasti Capitolini for Roman chronology?",
+                "How did the cursus honorum evolve during the Principate?",
+                "What was the role of the scriba in Roman administrative hierarchy?"
+            ]
+            
+            selected_expert = st.selectbox("Or choose an expert question:", ["Select..."] + expert_examples)
+            if selected_expert != "Select...":
+                if st.button("🎯 Explore Expert Question"):
+                    st.session_state.level_query = selected_expert
+                    st.session_state.query_level = 'advanced'
+            
+            # Custom advanced question
+            st.subheader("💬 Your Research Question")
+            advanced_custom = st.text_area(
+                "Pose a scholarly research question:",
+                placeholder="e.g., How did the philosophical schools of the Hellenistic period influence Roman intellectual development, and what evidence do we have for cross-cultural philosophical dialogue?",
+                height=120,
+                key="advanced_input"
+            )
+            
+            if st.button("🔍 Research (Advanced Level)", key="advanced_search"):
+                if advanced_custom:
+                    st.session_state.level_query = advanced_custom
+                    st.session_state.query_level = 'advanced'
+        
+        with col2:
+            st.subheader("🎯 Advanced Features")
+            st.info("""
+            **At Advanced Level, you get:**
+            • Comprehensive scholarly analysis
+            • Multiple source perspectives
+            • Historiographical discussion
+            • Primary source citations
+            • Modern scholarly debates
+            • Cross-cultural comparisons
+            • Methodological considerations
+            """)
+            
+            st.subheader("🕸️ Relationship Mapping")
+            central_figure = st.text_input(
+                "🎭 Central Figure/Concept:",
+                placeholder="e.g., Cicero, Stoicism, Augustan Poetry"
+            )
+            
+            if st.button("🗺️ Generate Network Analysis"):
+                if central_figure:
+                    st.session_state.level_query = f"Provide a comprehensive network analysis of {central_figure}, including intellectual influences, social connections, cultural impact, and historical significance with detailed source analysis"
+                    st.session_state.query_level = 'advanced'
+            
+            st.subheader("📊 Specialized Tools")
+            if st.button("📜 Manuscript Analysis"):
+                st.session_state.level_query = "Discuss the manuscript tradition and textual criticism of a major classical work"
+                st.session_state.query_level = 'advanced'
+            
+            if st.button("🏛️ Prosopographical Study"):
+                st.session_state.level_query = "Analyze the family connections and social networks of Roman senatorial families"
+                st.session_state.query_level = 'advanced'
+    
+    # Process and display results based on selected level
+    if "level_query" in st.session_state and st.session_state.level_query:
+        st.divider()
+        query = st.session_state.level_query
+        level = st.session_state.get('query_level', 'novice')
+        
+        # Create level-appropriate prompts
+        level_prompts = {
+            'novice': """
+            Provide a simple, clear explanation suitable for beginners. Include:
+            - Basic facts and definitions
+            - Simple, easy-to-understand language
+            - Key points without overwhelming detail
+            - Visual descriptions when helpful
+            - Clear, direct answers
+            Keep the explanation concise but complete for someone new to the topic.
+            """,
+            'intermediate': """
+            Provide a detailed explanation with historical context. Include:
+            - Comprehensive background information
+            - Cause-and-effect relationships
+            - Historical significance and impact
+            - Multiple perspectives when relevant
+            - Connections to related topics
+            - Some primary source references
+            Use scholarly language but remain accessible.
+            """,
+            'advanced': """
+            Provide a comprehensive scholarly analysis. Include:
+            - Detailed historiographical discussion
+            - Multiple primary and secondary sources
+            - Modern scholarly debates and interpretations
+            - Cross-cultural and comparative analysis
+            - Methodological considerations
+            - Textual criticism where relevant
+            - Full academic context and implications
+            Use advanced scholarly language and provide extensive detail.
+            """
+        }
+        
+        enhanced_query = f"{query}\n\n{level_prompts[level]}"
+        
+        st.subheader(f"🔍 {level.title()} Level Results")
+        st.write(f"**Query:** {query}")
+        st.write(f"**Explanation Level:** {level.title()}")
+        
+        with st.spinner(f"🧠 Preparing {level} level analysis..."):
+            try:
+                result = qa({"query": enhanced_query})
+                
+                answer = result["result"]
+                sources = result.get("source_documents", [])
+                
+                # Display results with level-appropriate formatting
+                if level == 'novice':
+                    st.markdown("### 📖 Simple Explanation")
+                    st.markdown(answer)
+                    
+                    if sources:
+                        with st.expander("📚 Basic Sources", expanded=False):
+                            for i, doc in enumerate(sources[:3], 1):  # Show fewer sources for novices
+                                source_name = doc.metadata.get('source', 'Unknown')
+                                st.write(f"**{i}.** {source_name}")
+                
+                elif level == 'intermediate':
+                    st.markdown("### 📚 Detailed Analysis")
+                    st.markdown(answer)
+                    
+                    if sources:
+                        with st.expander(f"📚 Sources & References ({len(sources)} sources)", expanded=False):
+                            for i, doc in enumerate(sources[:6], 1):  # Show moderate number of sources
+                                source_name = doc.metadata.get('source', 'Unknown')
+                                page = doc.metadata.get('page', 'N/A')
+                                content_preview = doc.page_content[:200] + "..." if len(doc.page_content) > 200 else doc.page_content
+                                st.markdown(f"""
+                                **Source {i}:** {source_name} (Page: {page})  
+                                *Preview:* {content_preview}
+                                """)
+                
+                else:  # advanced
+                    st.markdown("### 🎓 Scholarly Analysis")
+                    st.markdown(answer)
+                    
+                    if sources:
+                        st.markdown("### 📚 Complete Source Analysis")
+                        
+                        # Advanced source categorization
+                        primary_sources = []
+                        secondary_sources = []
+                        other_sources = []
+                        
+                        for doc in sources:
+                            source_name = doc.metadata.get('source', 'Unknown').lower()
+                            if any(term in source_name for term in ['inscription', 'papyrus', 'manuscript', 'ancient']):
+                                primary_sources.append(doc)
+                            elif any(term in source_name for term in ['modern', 'scholar', 'analysis', 'study']):
+                                secondary_sources.append(doc)
+                            else:
+                                other_sources.append(doc)
+                        
+                        if primary_sources:
+                            with st.expander(f"📜 Primary Sources ({len(primary_sources)})", expanded=True):
+                                for i, doc in enumerate(primary_sources, 1):
+                                    source_name = doc.metadata.get('source', 'Unknown')
+                                    page = doc.metadata.get('page', 'N/A')
+                                    content = doc.page_content[:500] + "..." if len(doc.page_content) > 500 else doc.page_content
+                                    st.markdown(f"""
+                                    **{i}. {source_name}** (Page: {page})  
+                                    {content}
+                                    """)
+                                    st.divider()
+                        
+                        if secondary_sources:
+                            with st.expander(f"🎓 Secondary Sources ({len(secondary_sources)})", expanded=False):
+                                for i, doc in enumerate(secondary_sources, 1):
+                                    source_name = doc.metadata.get('source', 'Unknown')
+                                    page = doc.metadata.get('page', 'N/A')
+                                    content = doc.page_content[:400] + "..." if len(doc.page_content) > 400 else doc.page_content
+                                    st.markdown(f"""
+                                    **{i}. {source_name}** (Page: {page})  
+                                    {content}
+                                    """)
+                                    st.divider()
+                        
+                        if other_sources:
+                            with st.expander(f"📚 Additional Sources ({len(other_sources)})", expanded=False):
+                                for i, doc in enumerate(other_sources, 1):
+                                    source_name = doc.metadata.get('source', 'Unknown')
+                                    page = doc.metadata.get('page', 'N/A')
+                                    content = doc.page_content[:300] + "..." if len(doc.page_content) > 300 else doc.page_content
+                                    st.markdown(f"""
+                                    **{i}. {source_name}** (Page: {page})  
+                                    {content}
+                                    """)
+                
+                # Clear the query after displaying results
+                del st.session_state.level_query
+                if 'query_level' in st.session_state:
+                    del st.session_state.query_level
+                
+            except Exception as e:
+                st.error(f"❌ Error in {level} level analysis: {e}")
+    
+    # Tips section
+    with st.expander("💡 How the Difficulty Levels Work", expanded=False):
+        st.markdown("""
+        ### 🎯 Understanding the Three Levels
+        
+        **🌱 Novice Level**
+        - **Questions:** Basic identification and simple "who/what/where" questions
+        - **Examples:** "Who is Zeus?" "What is the Colosseum?" "What does SPQR mean?"
+        - **Answers:** Simple, clear explanations with basic facts
+        - **Perfect for:** Beginners, quick facts, study review
+        
+        **📚 Intermediate Level**  
+        - **Questions:** More complex "how/why" questions requiring analysis
+        - **Examples:** "How did Roman government work?" "Why did the Trojan War start?"
+        - **Answers:** Detailed explanations with historical context and connections
+        - **Perfect for:** Students preparing for competitions, deeper understanding
+        
+        **🧠 Advanced Level**
+        - **Questions:** Scholarly research questions with multiple variables
+        - **Examples:** "Who was the lyre teacher of Nero?" "How did Hellenistic philosophy influence Roman jurisprudence?"
+        - **Answers:** Comprehensive analysis with primary sources and scholarly debate
+        - **Perfect for:** Advanced students, researchers, complex certamen questions
+        
+        ### 🔍 Same Information, Different Depth
+        
+        All levels access the **same complete knowledge base** - the difference is in explanation complexity:
+        - **Novice:** Gets the essential facts clearly explained
+        - **Intermediate:** Gets context, background, and connections  
+        - **Advanced:** Gets full scholarly treatment with sources and analysis
+        
+        Choose the level that matches your needs and understanding!
+        """)
