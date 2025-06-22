@@ -20,7 +20,8 @@ logger = logging.getLogger(__name__)
 st.set_page_config(
     page_title="CertamenBot", 
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
+    page_icon="🏛️"
 )
 
 # --- ENHANCED CONFIGURATION ---
@@ -311,6 +312,67 @@ def create_enhanced_qa_chain(vectorstore, embeddings, model_name, temperature, m
         return None
 
 # --- MAIN APP ---
+# Custom logo/header with CB styling
+st.markdown("""
+    <div style="
+        display: flex; 
+        align-items: center; 
+        justify-content: center; 
+        padding: 1rem 0 2rem 0;
+        margin-bottom: 1rem;
+    ">
+        <div style="
+            background: linear-gradient(135deg, #005f73, #0a9396, #94d3a2);
+            width: 80px;
+            height: 80px;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 8px 32px rgba(0,95,115,0.3);
+            margin-right: 1rem;
+            position: relative;
+            overflow: hidden;
+        ">
+            <div style="
+                position: absolute;
+                top: -20px;
+                right: -20px;
+                width: 60px;
+                height: 60px;
+                background: rgba(255,255,255,0.1);
+                border-radius: 50%;
+            "></div>
+            <span style="
+                font-size: 2.5rem;
+                font-weight: 900;
+                color: white;
+                font-family: 'Georgia', serif;
+                text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+                position: relative;
+                z-index: 2;
+            ">CB</span>
+        </div>
+        <div>
+            <h1 style="
+                margin: 0;
+                font-size: 3rem;
+                font-weight: 700;
+                background: linear-gradient(135deg, #005f73, #0a9396);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                font-family: 'Georgia', serif;
+            ">CertamenBot</h1>
+            <p style="
+                margin: 0;
+                color: #666;
+                font-size: 1.1rem;
+                font-style: italic;
+            ">Your Classical Studies AI Assistant</p>
+        </div>
+    </div>
+""", unsafe_allow_html=True)
+
 st.title("🏛️ CertamenBot")
 
 # Create tabs
