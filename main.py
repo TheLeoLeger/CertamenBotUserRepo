@@ -190,7 +190,7 @@ def create_qa_chain(_vectorstore, model_name, temperature, max_tokens):
             chain_type="stuff",
             retriever=_vectorstore.as_retriever(
                 search_type="similarity",
-                search_kwargs={"k": 4}  # Return top 4 most relevant chunks
+                search_kwargs={"k": 8}  # Return top 4 most relevant chunks
             ),
             return_source_documents=True,
         )
