@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # --- PAGE CONFIG ---
 st.set_page_config(
-    page_title="CertamenBot Pro", 
+    page_title="CertamenBot", 
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -205,7 +205,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- LOAD VECTORSTORE WITH ENHANCED RETRIEVAL ---
-@st.cache_resource(show_spinner="Loading enhanced knowledge base...")
+@st.cache_resource(show_spinner="Loading knowledge base...")
 def load_enhanced_vectorstore(path, embedding_model):
     """Load vectorstore with enhanced retrieval capabilities"""
     try:
@@ -234,33 +234,21 @@ def create_enhanced_retriever(_vectorstore, _embeddings, retrieval_method="hybri
                 search_kwargs={"k": 8}
             )
             
-            # Get all documents for BM25 (this is a simplified approach)
-            # In production, you'd want to store documents separately
-            docs = []
-            try:
-                # This is a workaround - in real implementation, store docs separately
-                all_docs = _vectorstore.similarity_search("", k=1000)  # Get sample docs
-                docs = all_docs
-            except:
-                docs = []
-            
-            if docs:
-                # Create BM25 retriever for keyword matching
-                bm25_retriever = BM25Retriever.from_documents(docs)
-                bm25_retriever.k = 8
-                
-                # Combine retrievers
-                ensemble_retriever = EnsembleRetriever(
-                    retrievers=[semantic_retriever, bm25_retriever],
-                    weights=[0.6, 0.4]  # Favor semantic but include keyword
-                )
-                return ensemble_retriever
-            else:
-                return semantic_retriever
-        else:
-            # Fallback to semantic only
+            # Simplified approach - use semantic retriever with better parameters
+            # BM25 requires too much preprocessing for real-time use
             return _vectorstore.as_retriever(
-                search_type="similarity",
+                search_type="mmr",  # Maximum Marginal Relevance for diversity
+                search_kwargs={
+                    "k": config['max_retrievals'],
+                    "fetch_k": 20,  # Fetch more, then filter to best
+                    "lambda_mult": 0.7  # Balance relevance vs diversity
+                }
+            )
+        else:
+            # Standard retrieval methods
+            search_type = "similarity" if retrieval_method == "semantic" else "similarity"
+            return _vectorstore.as_retriever(
+                search_type=search_type,
                 search_kwargs={"k": config['max_retrievals']}
             )
             
@@ -273,9 +261,8 @@ def create_enhanced_retriever(_vectorstore, _embeddings, retrieval_method="hybri
         )
 
 # --- ENHANCED QA CHAIN ---
-@st.cache_resource
-def create_enhanced_qa_chain(_vectorstore, _embeddings, model_name, temperature, max_tokens, retrieval_method="hybrid"):
-    """Create enhanced QA chain with better retrieval"""
+def create_enhanced_qa_chain(vectorstore, embeddings, model_name, temperature, max_tokens, retrieval_method="hybrid"):
+    """Create enhanced QA chain with better retrieval - NOT CACHED for dynamic updates"""
     try:
         llm = ChatOpenAI(
             temperature=temperature,
@@ -285,7 +272,7 @@ def create_enhanced_qa_chain(_vectorstore, _embeddings, model_name, temperature,
         )
         
         # Create enhanced retriever
-        retriever = create_enhanced_retriever(_vectorstore, _embeddings, retrieval_method)
+        retriever = create_enhanced_retriever(vectorstore, embeddings, retrieval_method)
         
         # Enhanced prompt template
         from langchain.prompts import PromptTemplate
@@ -324,7 +311,7 @@ def create_enhanced_qa_chain(_vectorstore, _embeddings, model_name, temperature,
         return None
 
 # --- MAIN APP ---
-st.title("🏛️ CertamenBot Pro")
+st.title("🏛️ CertamenBot")
 
 # Create tabs
 tab1, tab2, tab3 = st.tabs(["🏛️ Chat", "🔍 Advanced Search", "ℹ️ About"])
@@ -370,7 +357,7 @@ with st.sidebar:
     # Show vectorstore status
     st.subheader("📊 Status")
     if download_vectorstore():
-        st.success("✅ Enhanced system ready!")
+        st.success("✅ Ready!")
     else:
         st.error("❌ Vectorstore failed")
         st.stop()
@@ -380,7 +367,7 @@ vectorstore, embeddings = load_enhanced_vectorstore(config['vectorstore_path'], 
 if not vectorstore:
     st.stop()
 
-# Create enhanced QA chain
+# Create enhanced QA chain - Recreate on parameter changes
 qa = create_enhanced_qa_chain(vectorstore, embeddings, model_choice, temperature, max_tokens, retrieval_method)
 if not qa:
     st.stop()
@@ -412,7 +399,7 @@ with tab1:
     
     with col1:
         query = st.text_input(
-            "💬 Ask about any name, place, event, or concept in Classical studies:",
+            "💬 Ask anything Certamen:",
             key="user_input",
             placeholder="e.g., Who is Minerva? What happened at the Battle of Actium? Etymology of 'democracy'",
             value=st.session_state.get("quick_query", "")
@@ -541,7 +528,7 @@ with tab1:
             st.divider()
     
     else:
-        st.info("👋 Welcome to CertamenBot Pro! Ask about any Classical name, place, or concept for comprehensive answers.")
+        st.info("👋 Welcome to CertamenBot! Ask anything Certamen-related for comprehensive answers.")
 
 with tab2:
     st.title("🔍 Advanced Search")
@@ -551,12 +538,12 @@ with tab2:
     st.info("🚧 Advanced features in development:\n- Filter by source type\n- Timeline visualization\n- Character relationship maps\n- Etymology trees")
 
 with tab3:
-    st.title("🏛️ About CertamenBot Pro")
+    st.title("🏛️ About CertamenBot")
     
     st.markdown("""
     ### Enhanced Features
     
-    CertamenBot Pro includes several improvements for better name and entity retrieval:
+    CertamenBot includes several improvements for better name and entity retrieval:
     
     **🔍 Enhanced Search:**
     - **Hybrid Retrieval**: Combines semantic understanding with keyword matching
