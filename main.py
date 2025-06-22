@@ -302,7 +302,7 @@ with tab2:
     
     ---
     
-    **⚠️ Please Note:** A few Sourcebooks could not be read and extracted by the AI, so if any questions can't be answered, that is probably why.
+    **⚠️ Nota Bene:** A few Sourcebooks could not be read and extracted by the AI, so if any questions can't be answered, that is probably why. For the full list of these books, see [this document](https://docs.google.com/document/d/1rgVMrTHy6OWoogtIk70jG90ApLDduVSryEvazGnyypk/edit?usp=sharing).
     
     ---
     
