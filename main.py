@@ -54,33 +54,7 @@ if not config['openai_api_key']:
     st.error("❌ OPENAI_API_KEY is not set in Streamlit secrets.")
     st.stop()
 
-# Debug API key (remove after fixing)
-with st.sidebar:
-    st.subheader("🔍 Debug Info")
-    if config['openai_api_key']:
-        st.write("Key length:", len(config['openai_api_key']))
-        st.write("Key starts with:", config['openai_api_key'][:15] + "...")
-        st.write("Key ends with:", "..." + config['openai_api_key'][-10:])
-        st.write("Format valid:", config['openai_api_key'].startswith(('sk-', 'sk-proj-')))
-        st.write("Has hyphen after proj:", config['openai_api_key'].startswith('sk-proj-'))
-        # Show the exact characters around the potential issue
-        if len(config['openai_api_key']) > 10:
-            st.write("Characters 7-12:", repr(config['openai_api_key'][6:12]))
-    else:
-        st.write("❌ No API key found")
-        
-    # Test button
-    if st.button("🧪 Test API Key"):
-        try:
-            # Simple test
-            test_llm = ChatOpenAI(
-                temperature=0,
-                openai_api_key=config['openai_api_key']
-            )
-            # This won't actually call the API, just validates the key format
-            st.success("✅ API key format accepted by ChatOpenAI")
-        except Exception as e:
-            st.error(f"❌ API key test failed: {e}")
+
 
 # --- AUTO-DOWNLOAD VECTORSTORE FILES ---
 @st.cache_data
