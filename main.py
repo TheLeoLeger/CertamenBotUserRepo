@@ -17,7 +17,7 @@ import json
 
 st.set_page_config(
     page_title="CertamenBot",
-    page_icon="✨",  # This will be overridden by our custom SVG
+    page_icon="🏆",  # This will be overridden by our custom SVG
     layout="wide",
     initial_sidebar_state="expanded"
 )
