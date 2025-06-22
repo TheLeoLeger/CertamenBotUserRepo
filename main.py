@@ -148,7 +148,7 @@ with st.sidebar:
     # Show vectorstore status
     st.subheader("📊 Status")
     if download_vectorstore():
-        st.success("✅ Vectorstore ready")
+        st.success("✅ Ready! Ask away!")
     else:
         st.error("❌ Vectorstore failed")
         st.stop()
