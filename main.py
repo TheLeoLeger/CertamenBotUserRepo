@@ -16,7 +16,7 @@ import json
 
 
 st.set_page_config(
-    page_title="CertamenBot",
+    page_title="CertamenBot - Your Certamen AI",
     page_icon="./assets/cb_logo.png",
     layout="wide",
     initial_sidebar_state="expanded"
