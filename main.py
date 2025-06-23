@@ -373,7 +373,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🏛️ CertamenBot")
-
+st.warning("⚠️ **Disclaimer:** This AI assistant can make mistakes. Always verify important information with authoritative sources, especially for competitive Certamen preparation.")
 # Create tabs
 tab1, tab2, tab3 = st.tabs(["🏛️ Chat", "🔍 Advanced Search", "ℹ️ About"])
 
