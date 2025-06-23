@@ -17,7 +17,7 @@ import json
 
 st.set_page_config(
     page_title="CertamenBot",
-    page_icon="page_icon="./assets/cb_logo.png",  # This will be overridden by our custom SVG
+    page_icon="./assets/cb_logo.png",
     layout="wide",
     initial_sidebar_state="expanded"
 )
