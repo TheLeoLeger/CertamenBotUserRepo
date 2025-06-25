@@ -14,6 +14,8 @@ from typing import List, Dict, Any
 import json
 # Custom CB Favicon (SVG data URL)
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 st.set_page_config(
     page_title="CertamenBot - Your Certamen AI",
