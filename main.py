@@ -52,7 +52,6 @@ def get_config():
     return config
 
 config = get_config()
-init_visitor_counter()
 # Validate API key
 if not config['openai_api_key']:
     st.error("❌ OPENAI_API_KEY is not set in Streamlit secrets.")
