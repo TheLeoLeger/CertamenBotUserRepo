@@ -12,6 +12,8 @@ import logging
 import re
 from typing import List, Dict, Any
 import json
+import sqlite3
+from datetime import datetime
 # Custom CB Favicon (SVG data URL)
 
 logging.basicConfig(level=logging.INFO)
@@ -50,7 +52,7 @@ def get_config():
     return config
 
 config = get_config()
-
+init_visitor_counter()
 # Validate API key
 if not config['openai_api_key']:
     st.error("❌ OPENAI_API_KEY is not set in Streamlit secrets.")
@@ -112,7 +114,32 @@ class EnhancedQueryProcessor:
         # Simple capitalized word extraction (can be enhanced with NER)
         entities = re.findall(r'\b[A-Z][a-z]+\b', query)
         return entities
+def init_visitor_counter():
+    """Initialize the visitor counter database"""
+    conn = sqlite3.connect('visitor_counter.db')
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS visitors 
+                 (id INTEGER PRIMARY KEY, count INTEGER, last_updated TEXT)''')
+    
+    c.execute("SELECT count FROM visitors WHERE id = 1")
+    if not c.fetchone():
+        c.execute("INSERT INTO visitors (id, count, last_updated) VALUES (1, 0, ?)", 
+                  (datetime.now().isoformat(),))
+    conn.commit()
+    conn.close()
 
+def increment_visitor_count():
+    """Increment and return the visitor count"""
+    conn = sqlite3.connect('visitor_counter.db')
+    c = conn.cursor()
+    c.execute("UPDATE visitors SET count = count + 1, last_updated = ? WHERE id = 1", 
+              (datetime.now().isoformat(),))
+    c.execute("SELECT count FROM visitors WHERE id = 1")
+    count = c.fetchone()[0]
+    conn.commit()
+    conn.close()
+    return count
+    
 # --- AUTO-DOWNLOAD VECTORSTORE FILES ---
 @st.cache_data
 def download_vectorstore():
@@ -374,6 +401,7 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
+visitor_count = increment_visitor_count()
 st.title("🏛️ CertamenBot")
 st.warning("⚠️ **Disclaimer:** This AI assistant can make mistakes. Always verify important information with authoritative sources, especially for competitive Certamen preparation.")
 # Create tabs
@@ -385,7 +413,8 @@ query_processor = EnhancedQueryProcessor()
 # Sidebar for settings
 with st.sidebar:
     st.header("⚙️ Settings")
-    
+    st.metric("👥 Total Visitors", f"{visitor_count:,}")
+    st.divider()
     # Model selection
     model_choice = st.selectbox(
         "Choose Model",
