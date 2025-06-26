@@ -114,27 +114,7 @@ class EnhancedQueryProcessor:
         # Simple capitalized word extraction (can be enhanced with NER)
         entities = re.findall(r'\b[A-Z][a-z]+\b', query)
         return entities
-        
-def init_visitor_counter():
-    """Initialize the visitor counter file"""
-    if not os.path.exists('visitor_count.txt'):
-        with open('visitor_count.txt', 'w') as f:
-            f.write('0')
-
-def increment_visitor_count():
-    """Increment and return the visitor count"""
-    try:
-        with open('visitor_count.txt', 'r') as f:
-            count = int(f.read().strip())
-    except:
-        count = 0
     
-    count += 1
-    
-    with open('visitor_count.txt', 'w') as f:
-        f.write(str(count))
-    
-    return count
 # --- AUTO-DOWNLOAD VECTORSTORE FILES ---
 @st.cache_data
 def download_vectorstore():
@@ -396,7 +376,7 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-visitor_count = increment_visitor_count()
+
 st.title("🏛️ CertamenBot")
 st.warning("⚠️ **Disclaimer:** This AI assistant can make mistakes. Always verify important information with authoritative sources, especially for competitive Certamen preparation.")
 # Create tabs
@@ -408,7 +388,6 @@ query_processor = EnhancedQueryProcessor()
 # Sidebar for settings
 with st.sidebar:
     st.header("⚙️ Settings")
-    st.metric("👥 Total Visitors", f"{visitor_count:,}")
     st.divider()
     # Model selection
     model_choice = st.selectbox(
