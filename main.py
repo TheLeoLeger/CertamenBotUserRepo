@@ -114,32 +114,27 @@ class EnhancedQueryProcessor:
         # Simple capitalized word extraction (can be enhanced with NER)
         entities = re.findall(r'\b[A-Z][a-z]+\b', query)
         return entities
+        
 def init_visitor_counter():
-    """Initialize the visitor counter database"""
-    conn = sqlite3.connect('visitor_counter.db')
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS visitors 
-                 (id INTEGER PRIMARY KEY, count INTEGER, last_updated TEXT)''')
-    
-    c.execute("SELECT count FROM visitors WHERE id = 1")
-    if not c.fetchone():
-        c.execute("INSERT INTO visitors (id, count, last_updated) VALUES (1, 0, ?)", 
-                  (datetime.now().isoformat(),))
-    conn.commit()
-    conn.close()
+    """Initialize the visitor counter file"""
+    if not os.path.exists('visitor_count.txt'):
+        with open('visitor_count.txt', 'w') as f:
+            f.write('0')
 
 def increment_visitor_count():
     """Increment and return the visitor count"""
-    conn = sqlite3.connect('visitor_counter.db')
-    c = conn.cursor()
-    c.execute("UPDATE visitors SET count = count + 1, last_updated = ? WHERE id = 1", 
-              (datetime.now().isoformat(),))
-    c.execute("SELECT count FROM visitors WHERE id = 1")
-    count = c.fetchone()[0]
-    conn.commit()
-    conn.close()
-    return count
+    try:
+        with open('visitor_count.txt', 'r') as f:
+            count = int(f.read().strip())
+    except:
+        count = 0
     
+    count += 1
+    
+    with open('visitor_count.txt', 'w') as f:
+        f.write(str(count))
+    
+    return count
 # --- AUTO-DOWNLOAD VECTORSTORE FILES ---
 @st.cache_data
 def download_vectorstore():
