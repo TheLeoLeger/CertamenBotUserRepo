@@ -370,7 +370,7 @@ st.markdown("""
                 color: #666;
                 font-size: 1.1rem;
                 font-style: italic;
-            ">Your Classical Studies AI Assistant</p>
+            ">Your Classical Studies AI Assistant - Est. June 2025</p>
         </div>
     </div>
 """, unsafe_allow_html=True)
